@@ -1,0 +1,10 @@
+node_modules
+.next
+.git
+.claude
+.cursor
+.vscode
+.specstory
+npm-debug.log
+README.md
+docs

@@ -1,0 +1,6 @@
+{
+  "enableAllProjectMcpServers": true,
+  "enabledPlugins": {
+    "codex@openai-codex": true
+  }
+}

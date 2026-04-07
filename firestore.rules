@@ -1,0 +1,23 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function ownsProject(projectId) {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/projects/$(projectId)).data.ownerUid == request.auth.uid;
+    }
+
+    match /projects/{projectId} {
+      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow read, update, delete: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
+
+      match /tasks/{taskId} {
+        allow create, read, update, delete: if ownsProject(projectId);
+      }
+    }
+  }
+}
+

@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: personal-project-manager
+spec:
+  rules:
+    - host: project-manager.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: personal-project-manager
+                port:
+                  number: 80
+

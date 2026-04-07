@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "figma": {
+      "type": "http",
+      "url": "https://mcp.figma.com/mcp"
+    },
+    "playwright": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "node_modules\\.bin\\playwright-mcp.cmd",
+        "--browser",
+        "msedge",
+        "--headless",
+        "--isolated"
+      ],
+      "env": {}
+    }
+  }
+}
