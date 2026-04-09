@@ -57,6 +57,9 @@ export function ProjectDetailScreen({ projectId }: { projectId: string }) {
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [isSuggestingActions, setIsSuggestingActions] = useState(false);
+  const [nextActions, setNextActions] = useState<string[]>([]);
+  const [nextActionsError, setNextActionsError] = useState<string | null>(null);
 
   // -------------------------------------------------------------------------
   // Effect 1: プロジェクト情報を 1 回だけ取得する
@@ -250,6 +253,50 @@ export function ProjectDetailScreen({ projectId }: { projectId: string }) {
     }
   }
 
+  async function handleSuggestNextActions() {
+    if (!project || !isAiConfigured) {
+      return;
+    }
+
+    setIsSuggestingActions(true);
+    setNextActionsError(null);
+
+    try {
+      const response = await fetch("/api/ai/suggest-next-actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          project: {
+            id: project.id,
+            name: project.name,
+            description: project.description,
+          },
+          tasks: tasks.map((task) => ({
+            id: task.id,
+            title: task.title,
+            description: task.description,
+            status: task.status,
+            priority: task.priority,
+            dueDate: task.dueDate,
+          })),
+        }),
+      });
+
+      const payload = (await response.json()) as { actions?: string[]; error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "次アクション提案の取得に失敗しました。");
+      }
+
+      setNextActions(Array.isArray(payload.actions) ? payload.actions : []);
+    } catch (suggestError) {
+      setNextActionsError(
+        suggestError instanceof Error ? suggestError.message : "次アクション提案の取得に失敗しました。",
+      );
+    } finally {
+      setIsSuggestingActions(false);
+    }
+  }
+
   return (
     <AuthenticatedShell
       title={project?.name ?? "プロジェクト詳細"} // プロジェクト名が取れていない間はデフォルト文字列
@@ -300,6 +347,33 @@ export function ProjectDetailScreen({ projectId }: { projectId: string }) {
             ) : null}
           </section>
 
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-slate-900">次アクション提案</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  タスクの状態をもとに、次に進める具体的な行動を提案します。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleSuggestNextActions}
+                disabled={!isAiConfigured || isSuggestingActions}
+                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isSuggestingActions ? "提案生成中..." : "次アクションを提案"}
+              </button>
+            </div>
+            {nextActionsError ? <p className="mt-3 text-sm text-rose-600">{nextActionsError}</p> : null}
+            {nextActions.length > 0 ? (
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                {nextActions.map((action) => (
+                  <li key={action}>{action}</li>
+                ))}
+              </ul>
+            ) : null}
+          </section>
+
           {/* xl 以上では左右 2 カラム: タスク一覧 | タスク詳細 */}
           <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(360px,0.75fr)]">
             <TaskList
@@ -310,7 +384,14 @@ export function ProjectDetailScreen({ projectId }: { projectId: string }) {
               onSelectTask={setSelectedTaskId}
               onCreateTask={handleCreateTask}
             />
-            <TaskDetailPanel task={selectedTask} onSave={handleSaveTask} onDelete={handleDeleteTask} />
+            <TaskDetailPanel
+              task={selectedTask}
+              project={project}
+              tasks={tasks}
+              isAiConfigured={isAiConfigured}
+              onSave={handleSaveTask}
+              onDelete={handleDeleteTask}
+            />
           </div>
         </div>
       )}

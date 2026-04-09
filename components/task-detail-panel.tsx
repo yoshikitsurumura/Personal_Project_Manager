@@ -17,10 +17,14 @@ import {
   type Task,
   type TaskInput,
 } from "@/types";
+import type { Project } from "@/types";
 
 /** TaskDetailPanel の props 型定義 */
 type TaskDetailPanelProps = {
   task: Task | null;                                       // 表示・編集するタスク（null = 未選択）
+  project: Project | null;
+  tasks: Task[];
+  isAiConfigured: boolean;
   onSave: (taskId: string, input: TaskInput) => Promise<void>; // 保存時のコールバック
   onDelete: (taskId: string) => Promise<void>;             // 削除時のコールバック
 };
@@ -35,7 +39,14 @@ type TaskDetailPanelProps = {
  *   task（DB の値）が変わったら useEffect でフォームを同期するが、
  *   ユーザーが入力中は form state（一時状態）だけが変わる。
  */
-export function TaskDetailPanel({ task, onSave, onDelete }: TaskDetailPanelProps) {
+export function TaskDetailPanel({
+  task,
+  project,
+  tasks,
+  isAiConfigured,
+  onSave,
+  onDelete,
+}: TaskDetailPanelProps) {
   // フォームの一時状態（task とは独立して管理する）
   const [form, setForm] = useState<TaskInput>(DEFAULT_TASK_INPUT);
 
@@ -44,6 +55,8 @@ export function TaskDetailPanel({ task, onSave, onDelete }: TaskDetailPanelProps
 
   // エラーメッセージ
   const [error, setError] = useState<string | null>(null);
+  const [isDrafting, setIsDrafting] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
 
   // task が変わったらフォームを最新の値で初期化する
   useEffect(() => {
@@ -122,6 +135,54 @@ export function TaskDetailPanel({ task, onSave, onDelete }: TaskDetailPanelProps
     }
   }
 
+  async function handleGenerateDraft() {
+    if (!project || !isAiConfigured || !form.title.trim()) {
+      return;
+    }
+
+    setIsDrafting(true);
+    setDraftError(null);
+
+    try {
+      const response = await fetch("/api/ai/draft-task", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          project: {
+            id: project.id,
+            name: project.name,
+            description: project.description,
+          },
+          taskTitle: form.title.trim(),
+          tasks: tasks.map((item) => ({
+            id: item.id,
+            title: item.title,
+            description: item.description,
+            status: item.status,
+            priority: item.priority,
+            dueDate: item.dueDate,
+          })),
+        }),
+      });
+
+      const payload = (await response.json()) as { description?: string; error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "説明文草案の生成に失敗しました。");
+      }
+
+      setForm((current) => ({
+        ...current,
+        description: payload.description ?? current.description,
+      }));
+    } catch (draftingError) {
+      setDraftError(
+        draftingError instanceof Error ? draftingError.message : "説明文草案の生成に失敗しました。",
+      );
+    } finally {
+      setIsDrafting(false);
+    }
+  }
+
   return (
     <section className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm">
       <div>
@@ -157,6 +218,20 @@ export function TaskDetailPanel({ task, onSave, onDelete }: TaskDetailPanelProps
             placeholder="作業内容や補足を記録"
           />
         </Field>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void handleGenerateDraft()}
+            className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!isAiConfigured || isDrafting || !project || !form.title.trim()}
+          >
+            {isDrafting ? "草案生成中..." : "AIで説明文草案を作る"}
+          </button>
+          {!isAiConfigured ? (
+            <p className="text-xs text-amber-700">AI 設定が未完了のため利用できません。</p>
+          ) : null}
+        </div>
+        {draftError ? <p className="text-sm text-rose-600">{draftError}</p> : null}
 
         {/* ステータス / 優先度 / 期限 を 3 列で配置 */}
         <div className="grid gap-4 md:grid-cols-3">

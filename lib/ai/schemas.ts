@@ -9,6 +9,22 @@ export type SummarizeProjectResponse = {
   summary: string;
 };
 
+export type SuggestNextActionsRequest = SummarizeProjectRequest;
+
+export type SuggestNextActionsResponse = {
+  actions: string[];
+};
+
+export type DraftTaskRequest = {
+  project: Pick<Project, "id" | "name" | "description">;
+  taskTitle: string;
+  tasks: Array<Pick<Task, "id" | "title" | "description" | "status" | "priority" | "dueDate">>;
+};
+
+export type DraftTaskResponse = {
+  description: string;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -59,4 +75,67 @@ export function parseSummaryFromModelOutput(output: string): SummarizeProjectRes
   }
 
   return { summary: trimmed };
+}
+
+export function parseSuggestNextActionsRequest(payload: unknown): SuggestNextActionsRequest {
+  return parseSummarizeProjectRequest(payload);
+}
+
+export function parseActionsFromModelOutput(output: string): SuggestNextActionsResponse {
+  const trimmed = output.trim();
+  try {
+    const parsed = JSON.parse(trimmed) as { actions?: unknown };
+    if (Array.isArray(parsed.actions)) {
+      const actions = parsed.actions
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .slice(0, 3);
+      if (actions.length > 0) {
+        return { actions };
+      }
+    }
+  } catch {
+    // JSONでない場合はフォールバックとして行単位で扱う
+  }
+
+  const fallbackActions = trimmed
+    .split("\n")
+    .map((line) => line.replace(/^\s*[-*\d.、]+\s*/, "").trim())
+    .filter(Boolean)
+    .slice(0, 3);
+
+  return { actions: fallbackActions };
+}
+
+export function parseDraftTaskRequest(payload: unknown): DraftTaskRequest {
+  if (!isRecord(payload)) {
+    throw new Error("Invalid request payload.");
+  }
+
+  const parsed = parseSummarizeProjectRequest(payload);
+  const taskTitle = typeof payload.taskTitle === "string" ? payload.taskTitle.trim() : "";
+  if (!taskTitle) {
+    throw new Error("Invalid task title.");
+  }
+
+  return {
+    project: parsed.project,
+    tasks: parsed.tasks,
+    taskTitle,
+  };
+}
+
+export function parseDraftDescriptionFromModelOutput(output: string): DraftTaskResponse {
+  const trimmed = output.trim();
+  try {
+    const parsed = JSON.parse(trimmed) as { description?: unknown };
+    if (typeof parsed.description === "string" && parsed.description.trim()) {
+      return { description: parsed.description.trim() };
+    }
+  } catch {
+    // JSONでない場合はフォールバックとして全文を description 扱いにする
+  }
+
+  return { description: trimmed };
 }
