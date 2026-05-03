@@ -154,11 +154,15 @@ type FilterSelectProps = {
 
 /**
  * フィルター用のセレクトボックスコンポーネント。
- * label と select を htmlFor で紐づけることでアクセシビリティを確保する。
+ * <label> の子として <select> を配置する「ラッピング型」の紐付けで
+ * アクセシビリティを確保する（htmlFor / id を書かなくても同じ効果になる）。
  *
  * 学習ポイント:
- *   <label> の htmlFor と <select> の id を一致させると、
- *   ラベルをクリックしたときにセレクトボックスにフォーカスが移る。
+ *   ラベルと入力要素を紐づける方法は 2 つある:
+ *   1) 明示: <label htmlFor="foo">...</label> + <input id="foo" />
+ *   2) 暗黙: <label>...<input /></label>（ここで採用）
+ *   どちらもラベルクリックで入力にフォーカスが移る。
+ *   2 の方がマークアップがシンプルで、id を他と重複しないよう管理する必要も無い。
  */
 function FilterSelect({ label, value, onChange, options }: FilterSelectProps) {
   return (

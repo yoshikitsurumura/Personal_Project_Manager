@@ -1,14 +1,21 @@
-import { redirect } from "next/navigation";
-
+// @author Claude
 // =============================================================================
-// [cursor] ルートページ（/）
-// トップ URL では画面を描画せず、サーバー側で /projects へリダイレクトする。
+// ルートページ（/）
+// トップ URL（http://localhost:3000/）にアクセスしたときの処理。
+// 画面は描画せず、即座に /projects へリダイレクトする。
+//
 // 学習ポイント:
-//   redirect() は Server Component から呼べる。クライアントの履歴を汚さず
-//   サーバー応答として 307/308 に相当する遷移を返す。
+//   redirect() は Next.js App Router のサーバーサイドリダイレクト関数。
+//   Server Component（"use client" がないファイル）から呼べる。
+//   内部的には HTTP 307（Temporary Redirect）を返し、
+//   ブラウザの履歴に / を残さず /projects に遷移する。
+//
+//   クライアント側の router.replace() と違い、
+//   サーバー側で完結するため JavaScript が実行される前にリダイレクトされる。
 // =============================================================================
+
+import { redirect } from "next/navigation";
 
 export default function HomePage() {
   redirect("/projects");
 }
-

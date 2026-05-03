@@ -4,7 +4,14 @@
 // =============================================================================
 // プロジェクト詳細画面
 // タスク一覧（左カラム）とタスク詳細パネル（右カラム）を組み合わせた画面。
-// プロジェクトの読み込み、タスクのリアルタイム購読、タスクの CRUD を管理する。
+// プロジェクトの読み込み、タスクのリアルタイム購読、タスクの CRUD、
+// および AI 機能（要約・次アクション提案）を管理する。
+//
+// AI 統合:
+//   - handleSummarizeProject: プロジェクト全体の AI 要約を取得
+//   - handleSuggestNextActions: 次にやるべきアクションの AI 提案を取得
+//   両方とも /api/ai/* の Route Handler を fetch で呼ぶ。
+//   AI が未設定（isAiConfigured = false）の場合はボタンが無効化される。
 // =============================================================================
 
 import { useRouter } from "next/navigation";
@@ -54,12 +61,19 @@ export function ProjectDetailScreen({ projectId }: { projectId: string }) {
 
   // プロジェクト読み込み中フラグ
   const [isLoadingProject, setIsLoadingProject] = useState(true);
-  const [isSummarizing, setIsSummarizing] = useState(false);
-  const [summary, setSummary] = useState<string | null>(null);
-  const [summaryError, setSummaryError] = useState<string | null>(null);
-  const [isSuggestingActions, setIsSuggestingActions] = useState(false);
-  const [nextActions, setNextActions] = useState<string[]>([]);
-  const [nextActionsError, setNextActionsError] = useState<string | null>(null);
+
+  // -------------------------------------------------------------------------
+  // AI 機能用の state
+  // 各 AI 機能は「処理中フラグ / 結果 / エラー」の 3 つの state を持つ。
+  // 独立した state にすることで、要約と次アクション提案を並行して実行しても
+  // 互いの状態が干渉しない。
+  // -------------------------------------------------------------------------
+  const [isSummarizing, setIsSummarizing] = useState(false);       // AI 要約の処理中フラグ
+  const [summary, setSummary] = useState<string | null>(null);     // AI 要約の結果テキスト
+  const [summaryError, setSummaryError] = useState<string | null>(null); // AI 要約のエラー
+  const [isSuggestingActions, setIsSuggestingActions] = useState(false);   // 次アクション提案の処理中フラグ
+  const [nextActions, setNextActions] = useState<string[]>([]);            // 提案されたアクション一覧
+  const [nextActionsError, setNextActionsError] = useState<string | null>(null); // 提案のエラー
 
   // -------------------------------------------------------------------------
   // Effect 1: プロジェクト情報を 1 回だけ取得する
@@ -210,8 +224,19 @@ export function ProjectDetailScreen({ projectId }: { projectId: string }) {
     await deleteTask(firestore, projectId, taskId);
   }
 
+  /**
+   * AI 要約を生成する。
+   * /api/ai/summarize-project に POST して、プロジェクトとタスク情報を送信する。
+   * 成功時は summary state にセットし、UI に表示する。
+   *
+   * 学習ポイント:
+   *   fetch でアプリ内の Route Handler を呼ぶパターン。
+   *   ブラウザ → Next.js サーバー → Gemini API の 2 段ホップになる。
+   *   レスポンスの ok プロパティで成功/失敗を判定し、
+   *   失敗時は response.json() からエラーメッセージを取り出す。
+   */
   async function handleSummarizeProject() {
-    if (!project || !isAiConfigured) {
+    if (!project || !isAiConfigured || !user) {
       return;
     }
 
@@ -219,9 +244,15 @@ export function ProjectDetailScreen({ projectId }: { projectId: string }) {
     setSummaryError(null);
 
     try {
+      // Firebase ID Token を Authorization ヘッダに載せてサーバー側で検証する。
+      const idToken = await user.getIdToken();
+
       const response = await fetch("/api/ai/summarize-project", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
         body: JSON.stringify({
           project: {
             id: project.id,
@@ -253,8 +284,13 @@ export function ProjectDetailScreen({ projectId }: { projectId: string }) {
     }
   }
 
+  /**
+   * 次アクション提案を AI で生成する。
+   * /api/ai/suggest-next-actions に POST する。
+   * 成功時は nextActions 配列にセットし、箇条書きで UI に表示する。
+   */
   async function handleSuggestNextActions() {
-    if (!project || !isAiConfigured) {
+    if (!project || !isAiConfigured || !user) {
       return;
     }
 
@@ -262,9 +298,15 @@ export function ProjectDetailScreen({ projectId }: { projectId: string }) {
     setNextActionsError(null);
 
     try {
+      // Firebase ID Token を Authorization ヘッダに載せてサーバー側で検証する。
+      const idToken = await user.getIdToken();
+
       const response = await fetch("/api/ai/suggest-next-actions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
         body: JSON.stringify({
           project: {
             id: project.id,
@@ -328,7 +370,7 @@ export function ProjectDetailScreen({ projectId }: { projectId: string }) {
               <button
                 type="button"
                 onClick={handleSummarizeProject}
-                disabled={!isAiConfigured || isSummarizing}
+                disabled={!isAiConfigured || isSummarizing || !user}
                 className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isSummarizing ? "要約生成中..." : "AI要約を生成"}
@@ -358,7 +400,7 @@ export function ProjectDetailScreen({ projectId }: { projectId: string }) {
               <button
                 type="button"
                 onClick={handleSuggestNextActions}
-                disabled={!isAiConfigured || isSuggestingActions}
+                disabled={!isAiConfigured || isSuggestingActions || !user}
                 className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isSuggestingActions ? "提案生成中..." : "次アクションを提案"}
@@ -388,6 +430,7 @@ export function ProjectDetailScreen({ projectId }: { projectId: string }) {
               task={selectedTask}
               project={project}
               tasks={tasks}
+              user={user}
               isAiConfigured={isAiConfigured}
               onSave={handleSaveTask}
               onDelete={handleDeleteTask}

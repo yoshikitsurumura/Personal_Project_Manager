@@ -58,7 +58,7 @@ def _load_model() -> tuple[Any, Any]:
         _model = AutoModelForCausalLM.from_pretrained(
             model_source,
             torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
-            device_map="auto",
+            device_map="cuda" if torch.cuda.is_available() else "cpu",
         )
     return _tokenizer, _model
 

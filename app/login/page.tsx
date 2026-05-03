@@ -45,8 +45,8 @@ export default function LoginPage() {
     );
   }
 
-  // ログイン中（user がいて loading 中）はリダイレクト待ちの表示
-  if (loading && user) {
+  // 認証状態の初期確認中はログイン画面を出さずに待機する
+  if (loading) {
     return <LoadingScreen label="プロジェクト画面へ移動しています..." />;
   }
 

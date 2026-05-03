@@ -5,9 +5,15 @@
 // タスク詳細パネル
 // タスクの編集フォームを表示する右カラムコンポーネント。
 // task が null の場合は「タスクを選択してください」を表示する。
+//
+// AI 統合:
+//   handleGenerateDraft: タスクのタイトルをもとに説明文の草案を AI で生成する。
+//   生成結果はフォームの description に自動挿入される（上書き、保存前の一時状態）。
+//   ユーザーが「タスクを保存」を押すまで Firestore には反映されない。
 // =============================================================================
 
 import { useEffect, useState, type ReactNode } from "react";
+import type { User } from "firebase/auth";
 
 import { EmptyState } from "@/components/empty-state";
 import {
@@ -22,9 +28,10 @@ import type { Project } from "@/types";
 /** TaskDetailPanel の props 型定義 */
 type TaskDetailPanelProps = {
   task: Task | null;                                       // 表示・編集するタスク（null = 未選択）
-  project: Project | null;
-  tasks: Task[];
-  isAiConfigured: boolean;
+  project: Project | null;                                 // 親プロジェクト情報（AI 草案生成の文脈に使う）
+  tasks: Task[];                                           // 全タスク配列（AI が既存タスクとの重複を避けるための参考情報）
+  user: User | null;                                       // AI Route の認証に使う Firebase ユーザー
+  isAiConfigured: boolean;                                 // AI 設定済みフラグ（false ならボタン無効化）
   onSave: (taskId: string, input: TaskInput) => Promise<void>; // 保存時のコールバック
   onDelete: (taskId: string) => Promise<void>;             // 削除時のコールバック
 };
@@ -43,6 +50,7 @@ export function TaskDetailPanel({
   task,
   project,
   tasks,
+  user,
   isAiConfigured,
   onSave,
   onDelete,
@@ -55,8 +63,10 @@ export function TaskDetailPanel({
 
   // エラーメッセージ
   const [error, setError] = useState<string | null>(null);
-  const [isDrafting, setIsDrafting] = useState(false);
-  const [draftError, setDraftError] = useState<string | null>(null);
+
+  // AI 草案生成用の state
+  const [isDrafting, setIsDrafting] = useState(false);           // AI 草案生成の処理中フラグ
+  const [draftError, setDraftError] = useState<string | null>(null); // AI 草案生成のエラー
 
   // task が変わったらフォームを最新の値で初期化する
   useEffect(() => {
@@ -135,8 +145,19 @@ export function TaskDetailPanel({
     }
   }
 
+  /**
+   * AI でタスク説明文の草案を生成する。
+   * /api/ai/draft-task に POST して、タイトル・プロジェクト情報・既存タスクを送信。
+   * 成功時はフォームの description を AI 生成テキストで上書きする。
+   *
+   * 学習ポイント:
+   *   setForm((current) => ({ ...current, description: ... })) で
+   *   他のフォームフィールド（title, status 等）を保持しつつ
+   *   description だけを上書きしている。
+   *   この時点ではまだ Firestore に保存されない（一時状態の更新のみ）。
+   */
   async function handleGenerateDraft() {
-    if (!project || !isAiConfigured || !form.title.trim()) {
+    if (!project || !isAiConfigured || !user || !form.title.trim()) {
       return;
     }
 
@@ -144,9 +165,15 @@ export function TaskDetailPanel({
     setDraftError(null);
 
     try {
+      // Firebase ID Token を Authorization ヘッダに載せてサーバー側で検証する。
+      const idToken = await user.getIdToken();
+
       const response = await fetch("/api/ai/draft-task", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
         body: JSON.stringify({
           project: {
             id: project.id,
@@ -223,7 +250,7 @@ export function TaskDetailPanel({
             type="button"
             onClick={() => void handleGenerateDraft()}
             className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={!isAiConfigured || isDrafting || !project || !form.title.trim()}
+            disabled={!isAiConfigured || isDrafting || !project || !user || !form.title.trim()}
           >
             {isDrafting ? "草案生成中..." : "AIで説明文草案を作る"}
           </button>

@@ -4,7 +4,7 @@
 // Firebase SDK のインスタンス（App / Auth / Firestore）を生成・再利用する層。
 // =============================================================================
 
-import { initializeApp, getApp, getApps, type FirebaseApp } from "firebase/app";
+import { deleteApp, initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
 
@@ -45,8 +45,11 @@ function getConfigKey(config: FirebaseWebConfig) {
  *
  * 学習ポイント:
  *   Firebase SDK は同名の App を複数 initializeApp するとエラーになる。
- *   getApps().length > 0 で「すでに初期化済みか」を確認し、
- *   初期化済みなら getApp() で既存インスタンスを取得するのが定石。
+ *   さらに Next.js の HMR ではモジュールが再評価されて cachedServices は初期化されるが、
+ *   Firebase SDK 側の App レジストリ（getApps()）は残り続ける。
+ *   このため、config が変わった or キャッシュが無い状態で既存 App が残っていれば
+ *   先に deleteApp で片付けてから initializeApp することで、
+ *   「古い config の App が再利用される」状態を避ける。
  */
 export function getFirebaseServices(
   config: FirebaseWebConfig | null,
@@ -63,9 +66,15 @@ export function getFirebaseServices(
     return cachedServices;
   }
 
-  // getApps() は現在初期化済みの Firebase App 一覧を返す。
-  // すでにある場合は getApp() で取得、なければ initializeApp で新規作成。
-  const app = getApps().length > 0 ? getApp() : initializeApp(config);
+  // config が変化した（あるいは初回）ので、既に初期化済みの App があれば破棄する。
+  // deleteApp は Promise を返すが、App はレジストリから同期的に外れるため、
+  // 直後の initializeApp は default 名の衝突を起こさない。
+  for (const existingApp of getApps()) {
+    void deleteApp(existingApp);
+  }
+  cachedServices = null;
+
+  const app = initializeApp(config);
 
   // 各サービスのインスタンスを app から取得してキャッシュに保存
   cachedServices = {

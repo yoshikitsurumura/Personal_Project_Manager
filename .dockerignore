@@ -8,3 +8,8 @@ node_modules
 npm-debug.log
 README.md
 docs
+logs
+.env
+.env.local
+.env.*.local
+.firebaserc

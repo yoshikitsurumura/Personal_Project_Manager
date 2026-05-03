@@ -19,3 +19,4 @@ logs/
 .serena/cache/
 .serena/memories/
 .serena/project.local.yml
+.playwright-mcp/

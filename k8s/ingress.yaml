@@ -3,6 +3,9 @@ kind: Ingress
 metadata:
   name: personal-project-manager
 spec:
+  # クラスタに合わせて書き換える。例: nginx / traefik / alb / gce など。
+  # 未指定だとデフォルトの IngressClass に依存するため、本番では明示を推奨。
+  ingressClassName: nginx
   rules:
     - host: project-manager.example.com
       http:

@@ -53,7 +53,7 @@ export function AuthenticatedShell({
   // Firebase が未設定の場合は設定手順を案内
   if (!isConfigured) {
     return (
-      <main className="px-6 py-14">
+      <main className="min-h-screen px-6 py-14">
         <SetupNotice />
       </main>
     );

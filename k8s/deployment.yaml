@@ -14,9 +14,16 @@ spec:
       labels:
         app: personal-project-manager
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: web
-          image: your-registry/personal-project-manager:latest
+          image: your-registry/personal-project-manager:replace-with-version
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
@@ -42,3 +49,8 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
